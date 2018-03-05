@@ -1,0 +1,196 @@
+---
+title: "Computational Modeling - Week 5 - Assignment 2 - Part 2"
+author: "Riccardo Fusaroli"
+date: "2/19/2017"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## In this assignment we learn how to assess rates from a binomial distribution, using the case of assessing your teachers' knowledge of CogSci.
+
+### Second part: Focusing on predictions
+
+Last year you assessed the teachers (darned time runs quick!). Now you want to re-test them and assess whether your models are producing reliable predictions. In Methods 3 we learned how to do machine-learning style assessment of predictions (e.g. rmse on testing datasets). Bayesian stats makes things a bit more complicated. So we'll try out how that works. N.B. You can choose which prior to use for the analysis of last year's data.
+
+Questions to be answered (but see guidance below):
+1- Write a paragraph discussing how assessment of prediction performance is different in Bayesian vs. frequentist models
+2- Provide at least one plot and one written line discussing prediction errors for each of the teachers.
+
+This is the old data:
+- Riccardo: 3 correct answers out of 6 questions
+- Kristian: 2 correct answers out of 2 questions (then he gets bored)
+- Josh: 160 correct answers out of 198 questions (Josh never gets bored)
+- Mikkel: 66 correct answers out of 132 questions
+
+This is the new data:
+- Riccardo: 9 correct answers out of 10 questions (then he freaks out about teaching preparation and leaves)
+- Kristian: 8 correct answers out of 12 questions
+- Josh: 148 correct answers out of 172 questions (again, Josh never gets bored)
+- Mikkel: 34 correct answers out of 65 questions
+
+Guidance Tips
+
+1. There are at least two ways of assessing predictions.
+2. Last year's results are this year's expectations.
+3. Are the parameter estimates changing? (way 1)(posterior (Betas))
+4. How does the new data look in last year's predictive posterior? (way 2)(plot predicitve posterior from last years model compared to the results we see?)
+
+```{r}
+
+setwd("C:/Users/kilda/OneDrive/Documents/R")
+library(pacman)
+p_load(rethinking, tidyverse)
+
+## getting our posterior to get our prior 
+#defining density (spacing of the sequence from 0-1)
+dense = 200
+#define grid
+p_grid <- seq(0,1, length.out = dense)
+#define prior
+prior <- rep(1,dense) #flat prior
+flatPrior <- rep(1,dense) 
+
+
+## take our code from last time, but chnage our prior to last times posterior 
+# function to get posterior 
+
+post = function(density, p_grid, right, questions, prior){
+#compute likelihood at each value in grid
+likelihood  <- dbinom(right, size = questions, prob=p_grid)
+#compute product of likelihood and prior
+unstd.posterior <- likelihood * prior
+#standardize the posterior, so it sums to 1
+posterior <- unstd.posterior / sum(unstd.posterior)
+
+#return values in a dataframe
+return(Data = data.frame(grid = p_grid, posterior=posterior, likelihood = likelihood, prior=prior))
+}
+
+# posterior from last data 
+riccardo = post(dense, p_grid, 3, 6, flatPrior)
+
+kristian = post(dense, p_grid, 2, 2, flatPrior)
+
+josh = post(dense, p_grid, 160, 198, flatPrior)
+
+mikkel = post(dense, p_grid, 66, 132, flatPrior)
+
+# take our past posteriors to make new priors
+#quick function to ease the sampling
+samplez <- function(df){
+  sample(df$grid, prob = df$posterior, size=1e5, replace=TRUE)
+}
+
+Oldric = samplez(riccardo)
+dens(Oldric)
+
+# finding the new posterior using old post as new prior
+newRic = rbinom(1e4, size=10 , prob= Oldric)
+simplehist(newRic)
+dens(newRic)
+
+#seeing when the answers match, and this is when we see that 90% of the probabilty distribution needs to be included in the intervals before the correct number of riccardo's answers is including, therefore it does not accurately predict riccardos performance. 
+# probability mass 
+
+PI(newRic, 0.9)
+# new Ric = 1-9 
+# compare by looking at the ployts and seeing how much we need to adjust PI to make it fit. 
+# the CI has to be increased a lot, so it is not good at precidicting performance. 
+
+## For Kristian 
+Oldkris = samplez(kristian)
+dens(Oldkris)
+
+# finding the new posterior using old post as new prior
+newKris= rbinom(1e4, size=12 , prob= Oldkris)
+simplehist(newKris)
+dens(newKris)
+
+#middle 50% of data - 
+HPDI(newKris, 0.7)
+# 0.5 is much better than this 
+
+
+## FOR JOSH 
+Oldjosh = samplez(josh)
+dens(Oldjosh)
+
+# finding the new posterior using old post as new prior
+newJosh = rbinom(1e4, size=172, prob= Oldjosh)
+simplehist(newJosh)
+
+#prob intervals 
+HPDI(newJosh, 0.90)
+# josh's doesn't predict well at all 
+
+
+
+
+## FOR MIKKEL 
+Oldmik = samplez(mikkel)
+dens(Oldmik)
+
+# finding the new posterior using old post as new prior
+newMik = rbinom(1e4, size=65 , prob= Oldmik)
+simplehist(newMik)
+
+#middle 50% of data 
+PI(newMik, 0.2)
+## pretty damn good predicitionzzz 
+
+## plots for ric  
+ric_post = post(dense, p_grid, 9,10, riccardo$posterior)
+ggplot(ric_post,aes(grid,posterior))+ 
+  geom_line()+
+  theme_classic()+ 
+  geom_line(aes(grid, prior),color='red')+  xlab("cog sci knowledge")+ 
+  ylab("posterior probability") 
+
+# plots for kristian 
+kris_post = post(dense, p_grid, 8,12, kristian$posterior)
+ggplot(kris_post,aes(grid,posterior))+ 
+  geom_line()+
+  theme_classic()+ 
+  geom_line(aes(grid, prior),color='red')+  xlab("cog sci knowledge")+ 
+  ylab("posterior probability") 
+
+# plots for Josh 
+josh_post = post(dense, p_grid, 148,172, josh$posterior)
+ggplot(josh_post,aes(grid,posterior))+ 
+  geom_line()+
+  theme_classic()+ 
+  geom_line(aes(grid, prior),color='red')+  xlab("cog sci knowledge")+ 
+  ylab("posterior probability") 
+
+
+## plots for Mikkel 
+mik_post = post(dense, p_grid, 34,65, mikkel$posterior)
+ggplot(mik_post,aes(grid,posterior))+ 
+  geom_line()+
+  theme_classic()+ 
+  geom_line(aes(grid, prior),color='red')+  xlab("cog sci knowledge")+ 
+  ylab("posterior probability") 
+
+
+
+# plots 
+
+```
+
+### Depending on time: Questions from the handbook
+2H1. Suppose there are two species of panda bear. Both are equally common in the wild and live in the same places. They look exactly alike and eat the same food, and there is yet no genetic assay capable of telling them apart. They differ however in their family sizes. Species A gives birth to twins 10% of the time, otherwise birthing a single infant. Species B births twins 20% of the time, otherwise birthing singleton infants. Assume these numbers are known with certainty, from many years of field research.
+Now suppose you are managing a captive panda breeding program. You have a new female panda of unknown species, and she has just given birth to twins. What is the probability that her next birth will also be twins?
+
+2H2. Recall all the facts from the problem above. Now compute the probability that the panda we have is from species A, assuming we have observed only the first birth and that it was twins.
+
+2H3. Continuing on from the previous problem, suppose the same panda mother has a second birth and that it is not twins, but a singleton infant. Compute the posterior probability that this panda is species A.
+
+2H4. A common boast of Bayesian statisticians is that Bayesian inference makes it easy to use all of the data, even if the data are of different types. So suppose now that a veterinarian comes along who has a new genetic test that she claims can identify the species of our mother panda. But the test, like all tests, is imperfect. This is the information you have about the test:
+- The probability it correctly identifies a species A panda is 0.8.
+- The probability it correctly identifies a species B panda is 0.65.
+The vet administers the test to your panda and tells you that the test is positive for species A. First ignore your previous information from the births and compute the posterior probability that your panda is species A. Then redo your calculation, now using the birth data as well.
